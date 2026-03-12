@@ -21,8 +21,7 @@ repositories {
 
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
-    annotationProcessor("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
-    //kapt("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
+    kapt("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 }
 
