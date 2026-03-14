@@ -11,6 +11,7 @@ import com.velocitypowered.api.event.player.ServerResourcePackSendEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
 import com.velocitypowered.api.plugin.Plugin
 import com.velocitypowered.api.proxy.ProxyServer
+import com.velocitypowered.api.proxy.ServerConnection
 import org.slf4j.Logger
 
 
@@ -24,7 +25,7 @@ class NexoProxy @Inject constructor(val logger: Logger, val server: ProxyServer)
 
     @Subscribe
     fun onProxyInitialization(event: ProxyInitializeEvent) {
-        server.channelRegistrar.register(NexoPackHelpers.HASH_CHANNEL)
+        server.channelRegistrar.register(NexoPackHelpers.PACK_HASH_CHANNEL)
         server.eventManager.register(this, ResourcePackListener(logger))
     }
 }
@@ -34,19 +35,16 @@ class ResourcePackListener(val logger: Logger) {
     // Called when a backend Nexo server sends us obfuscation data for a pack
     @Subscribe
     fun PluginMessageEvent.onHashUpload() {
-        if (identifier != NexoPackHelpers.HASH_CHANNEL) return
+        if (identifier != NexoPackHelpers.PACK_HASH_CHANNEL) return
 
-        val raw = data.decodeToString()
-        logger.info("Received raw data: $raw")  // temporary, remove after debugging
+        val json = JsonParser.parseString(data.decodeToString()).asJsonObject
+        val pack = ResourcePackInfo(json)
 
-        val json = JsonParser.parseString(raw).asJsonObject
-        val pack = ObfuscatedResourcePack(json)
-
-        // Store keyed by obfuscated UUID for O(1) lookup in onPackSend
         NexoPackHelpers.nexoObfuscationMappings[pack.unobfuscatedHash] = pack
         result = PluginMessageEvent.ForwardResult.handled()
 
-        logger.info("Registered obfuscation mapping: ${pack.unobfuscatedHash} -> ${pack.uuid} from $source")
+        val serverName = (source as ServerConnection).serverInfo.name
+        logger.info("Registered obfuscation mapping: ${pack.unobfuscatedHash} -> ${pack.obfuscatedHash} from $serverName")
     }
 
     // Clean up player state on disconnect
@@ -71,6 +69,14 @@ class ResourcePackListener(val logger: Logger) {
         }
 
         val mapping = NexoPackHelpers.findMappingByUUID(packId!!) ?: return
+
+        //TODO This should be a buffer. As even if the hash is stored and its a NexoPack we might want to remove it
+        // for example if a new pack was sent up and given to players
+        // as servers dont have one packet but one for clear and one for send
+        // So this should store a ResourcePackInfo object with the packet, wait a second to see if any send event is triggered for it
+        // and if so for this player ignore, otherwise send
+        // not sure how to entirely do this without causing recursion or other issues
+
         result = ResultedEvent.GenericResult.denied()
         logger.info("Denied remove of Nexo pack ${mapping.unobfuscatedHash} for ${serverConnection.player.username}")
     }
@@ -85,38 +91,23 @@ class ResourcePackListener(val logger: Logger) {
     @Subscribe
     fun ServerResourcePackSendEvent.onPackSend() {
         val player = serverConnection.player
-        val incomingId = receivedResourcePack.hash?.toHexString()!!
+        val incomingId = receivedResourcePack.hash?.toHexString()?.trim()!!
 
-        val mapping = NexoPackHelpers.findMappingByHash(incomingId) ?: run {
-            logger.info("Non-Nexo pack $incomingId for ${player.username}, allowing through")
-            return
-        }
+        val (unobf, obf) = NexoPackHelpers.findMappingByHash(incomingId)
+            ?: return logger.info("Non NexoPack $incomingId for ${player.username}, allowing through")
 
         val currentUnobfId = NexoPackHelpers.packHashTracker[player.uniqueId]
 
-        if (currentUnobfId == mapping.unobfuscatedHash) {
+        if (currentUnobfId == unobf) {
             // Player already has this pack (possibly under a different obfuscated hash)
             result = ResultedEvent.GenericResult.denied()
-            logger.info(
-                "Denied duplicate Nexo pack send for ${player.username}: " +
-                        "unobfuscated=${mapping.unobfuscatedHash}, already loaded"
-            )
+            logger.info("Denied duplicate NexoPack-send for ${player.username}: unobfuscated=${unobf}, already loaded")
             return
         }
 
-        // New or different pack — swap to the canonical obfuscated version and allow
-        providedResourcePack = providedResourcePack
-            .asBuilder()
-            .setId(mapping.uuid)
-            //.setUrl(mapping.url)
-            .setHash(mapping.obfuscatedHash.hexToByteArray())
-            .build()
+        // Player had no NexoPack or one bound to another UnobfHash, so we let this pass & reassign current
+        NexoPackHelpers.packHashTracker[player.uniqueId] = unobf
 
-        NexoPackHelpers.packHashTracker[player.uniqueId] = mapping.unobfuscatedHash
-
-        logger.info(
-            "Sending Nexo pack to ${player.username}: " +
-                    "unobfuscated=${mapping.unobfuscatedHash}, obfuscated=${mapping.uuid}"
-        )
+        logger.info("Sending Nexo pack to ${player.username}: unobfuscated=${unobf}, obfuscated=${obf}")
     }
 }
