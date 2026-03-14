@@ -4,6 +4,7 @@ import org.jetbrains.gradle.ext.taskTriggers
 plugins {
     kotlin("jvm") version "2.3.0"
     kotlin("kapt") version "2.3.0"
+    kotlin("plugin.serialization") version "2.3.0"
     id("com.gradleup.shadow") version "9.3.1"
     id("eclipse")
     id("org.jetbrains.gradle.plugin.idea-ext") version "1.1.8"
@@ -22,6 +23,7 @@ repositories {
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
     kapt("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
+    implementation("com.charleskorn.kaml:kaml:0.67.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 }
 

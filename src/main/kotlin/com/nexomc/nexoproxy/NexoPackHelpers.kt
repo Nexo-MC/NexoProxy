@@ -7,14 +7,21 @@ typealias PlayerUUID = UUID
 typealias PackUUID = UUID
 
 object NexoPackHelpers {
-    internal val nexoObfuscationMappings: MutableMap<String, ResourcePackInfo> = mutableMapOf()
+    private val byObfHash: MutableMap<String, ResourcePackInfo> = mutableMapOf()
+    private val byObfUuid: MutableMap<UUID, ResourcePackInfo> = mutableMapOf()
+
     internal val packHashTracker: MutableMap<PlayerUUID, String> = mutableMapOf()
     val PACK_HASH_CHANNEL: MinecraftChannelIdentifier = MinecraftChannelIdentifier.from("nexo:pack_hash")
 
+    fun addMapping(pack: ResourcePackInfo) {
+        byObfHash[pack.obfuscatedHash] = pack
+        byObfUuid[pack.obfuscatedUuid] = pack
+    }
+
+    val allMappings: Collection<ResourcePackInfo> get() = byObfHash.values
+
     fun findMappingByHash(hash: String): ResourcePackInfo? =
-        nexoObfuscationMappings[hash] ?: nexoObfuscationMappings.values.find { it.unobfuscatedHash == hash || it.obfuscatedHash == hash }
+        byObfHash[hash] ?: byObfHash.values.find { it.unobfuscatedHash == hash }
 
-    fun findMappingByUUID(uuid: UUID): ResourcePackInfo? =
-        nexoObfuscationMappings.values.find { it.obfuscatedUuid == uuid }
+    fun findMappingByUUID(uuid: UUID): ResourcePackInfo? = byObfUuid[uuid]
 }
-

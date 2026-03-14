@@ -1,0 +1,5 @@
+/build/
+/.kotlin/
+/.idea/
+/.gradle/
+/.claude/

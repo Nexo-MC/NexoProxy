@@ -1,19 +1,31 @@
-package com.nexomc.nexoproxy;
+package com.nexomc.nexoproxy
 
+import com.charleskorn.kaml.Yaml
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import com.google.inject.Inject
 import com.velocitypowered.api.event.ResultedEvent
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.connection.DisconnectEvent
 import com.velocitypowered.api.event.connection.PluginMessageEvent
 import com.velocitypowered.api.event.player.ServerResourcePackRemoveEvent
 import com.velocitypowered.api.event.player.ServerResourcePackSendEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
 import com.velocitypowered.api.plugin.Plugin
+import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.proxy.ServerConnection
 import org.slf4j.Logger
+import java.nio.file.Files
+import java.nio.file.Path
 
+
+@Serializable
+data class NexoConfig(val debug: Boolean = false)
 
 @Plugin(
     id = "nexoproxy",
@@ -21,16 +33,82 @@ import org.slf4j.Logger
     version = BuildConstants.VERSION,
     authors = ["boy0000"]
 )
-class NexoProxy @Inject constructor(val logger: Logger, val server: ProxyServer) {
+class NexoProxy @Inject constructor(
+    val logger: Logger,
+    val server: ProxyServer,
+    @DataDirectory val dataDirectory: Path
+) {
+
+    private val packsFile get() = dataDirectory.resolve(".packs.json")
+    private val gson = GsonBuilder().setPrettyPrinting().create()
+    private lateinit var listener: ResourcePackListener
 
     @Subscribe
     fun onProxyInitialization(event: ProxyInitializeEvent) {
+        val config = loadConfig()
+        loadPacks()
+
+        listener = ResourcePackListener(logger, config.debug)
         server.channelRegistrar.register(NexoPackHelpers.PACK_HASH_CHANNEL)
-        server.eventManager.register(this, ResourcePackListener(logger))
+        server.eventManager.register(this, listener)
+        server.commandManager.register(
+            server.commandManager.metaBuilder("nexoproxy").aliases("nxp").plugin(this).build(),
+            NexoProxyCommand(this)
+        )
+    }
+
+    @Subscribe
+    fun onProxyShutdown(event: ProxyShutdownEvent) {
+        savePacks()
+    }
+
+    fun reload(source: net.kyori.adventure.audience.Audience) {
+        savePacks()
+        val config = loadConfig()
+        listener.debug = config.debug
+        source.sendMessage(net.kyori.adventure.text.Component.text("[NexoProxy] Reloaded config and saved pack cache."))
+        logger.info("Reloaded by ${if (source is com.velocitypowered.api.proxy.Player) source.username else "console"}")
+    }
+
+    private fun loadConfig(): NexoConfig {
+        Files.createDirectories(dataDirectory)
+        val configFile = dataDirectory.resolve("config.yml")
+        if (Files.notExists(configFile)) {
+            NexoProxy::class.java.getResourceAsStream("/config.yml")!!.use { input ->
+                Files.copy(input, configFile)
+            }
+        }
+        return Yaml.default.decodeFromString(configFile.toFile().readText())
+    }
+
+    private fun loadPacks() {
+        if (Files.notExists(packsFile)) return
+        runCatching {
+            val array = JsonParser.parseReader(packsFile.toFile().reader()).asJsonArray
+            for (element in array) {
+                NexoPackHelpers.addMapping(ResourcePackInfo(element.asJsonObject))
+            }
+            logger.info("Loaded ${array.size()} cached pack mapping(s) from ${packsFile.fileName}")
+        }.onFailure { logger.warn("Failed to load pack cache: ${it.message}") }
+    }
+
+    private fun savePacks() {
+        runCatching {
+            Files.createDirectories(dataDirectory)
+            val entries = NexoPackHelpers.allMappings.toList().takeLast(20)
+            val array = JsonArray()
+            entries.forEach { array.add(it.toJson()) }
+            packsFile.toFile().writeText(gson.toJson(array))
+            logger.info("Saved ${entries.size} pack mapping(s) to ${packsFile.fileName}")
+        }.onFailure { logger.warn("Failed to save pack cache: ${it.message}") }
     }
 }
 
-class ResourcePackListener(val logger: Logger) {
+class ResourcePackListener(val logger: Logger, @Volatile var debug: Boolean) {
+
+    private fun debugLog(msg: String) {
+        if (debug) logger.info(msg)
+    }
 
     // Called when a backend Nexo server sends us obfuscation data for a pack
     @Subscribe
@@ -40,11 +118,11 @@ class ResourcePackListener(val logger: Logger) {
         val json = JsonParser.parseString(data.decodeToString()).asJsonObject
         val pack = ResourcePackInfo(json)
 
-        NexoPackHelpers.nexoObfuscationMappings[pack.unobfuscatedHash] = pack
+        NexoPackHelpers.addMapping(pack)
         result = PluginMessageEvent.ForwardResult.handled()
 
         val serverName = (source as ServerConnection).serverInfo.name
-        logger.info("Registered obfuscation mapping: ${pack.unobfuscatedHash} -> ${pack.obfuscatedHash} from $serverName")
+        debugLog("Registered obfuscation mapping: ${pack.unobfuscatedHash} -> ${pack.obfuscatedHash} from $serverName")
     }
 
     // Clean up player state on disconnect
@@ -55,7 +133,7 @@ class ResourcePackListener(val logger: Logger) {
 
     // Intercept all resource pack removes.
     // We deny removes for any pack we recognise as a Nexo pack.
-    // Rationale: if a new *different* Nexo pack is incoming, the send event
+    // if a new *different* Nexo pack is incoming, the send event
     // will go through and the client handles the swap automatically.
     // If the same pack is incoming, we'd deny that too, so the remove is moot.
     // Non-Nexo packs (packId not in our mappings) are always allowed through.
@@ -70,15 +148,8 @@ class ResourcePackListener(val logger: Logger) {
 
         val mapping = NexoPackHelpers.findMappingByUUID(packId!!) ?: return
 
-        //TODO This should be a buffer. As even if the hash is stored and its a NexoPack we might want to remove it
-        // for example if a new pack was sent up and given to players
-        // as servers dont have one packet but one for clear and one for send
-        // So this should store a ResourcePackInfo object with the packet, wait a second to see if any send event is triggered for it
-        // and if so for this player ignore, otherwise send
-        // not sure how to entirely do this without causing recursion or other issues
-
         result = ResultedEvent.GenericResult.denied()
-        logger.info("Denied remove of Nexo pack ${mapping.unobfuscatedHash} for ${serverConnection.player.username}")
+        debugLog("Denied remove of Nexo pack ${mapping.unobfuscatedHash} for ${serverConnection.player.username}")
     }
 
     // Intercept all resource pack sends.
@@ -94,20 +165,17 @@ class ResourcePackListener(val logger: Logger) {
         val incomingId = receivedResourcePack.hash?.toHexString()?.trim()!!
 
         val (unobf, obf) = NexoPackHelpers.findMappingByHash(incomingId)
-            ?: return logger.info("Non NexoPack $incomingId for ${player.username}, allowing through")
+            ?: return debugLog("Non NexoPack $incomingId for ${player.username}, allowing through")
 
         val currentUnobfId = NexoPackHelpers.packHashTracker[player.uniqueId]
 
         if (currentUnobfId == unobf) {
-            // Player already has this pack (possibly under a different obfuscated hash)
             result = ResultedEvent.GenericResult.denied()
-            logger.info("Denied duplicate NexoPack-send for ${player.username}: unobfuscated=${unobf}, already loaded")
+            debugLog("Denied duplicate NexoPack-send for ${player.username}: unobfuscated=${unobf}, already loaded")
             return
         }
 
-        // Player had no NexoPack or one bound to another UnobfHash, so we let this pass & reassign current
         NexoPackHelpers.packHashTracker[player.uniqueId] = unobf
-
-        logger.info("Sending Nexo pack to ${player.username}: unobfuscated=${unobf}, obfuscated=${obf}")
+        debugLog("Sending Nexo pack to ${player.username}: unobfuscated=${unobf}, obfuscated=${obf}")
     }
 }

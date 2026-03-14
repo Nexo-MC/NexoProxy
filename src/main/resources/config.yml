@@ -1,0 +1,5 @@
+# NexoProxy Configuration
+
+# Enable debug logging for resource pack events.
+# Useful for diagnosing pack handshake issues; disable in production.
+debug: false

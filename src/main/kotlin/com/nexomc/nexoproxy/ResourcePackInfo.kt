@@ -16,4 +16,11 @@ data class ResourcePackInfo(
         obfuscatedHash = json.get("obfuscated").asString,
         unobfuscatedHash = json.get("unobfuscated").asString
     )
+
+    fun toJson(): JsonObject = JsonObject().apply {
+        addProperty("uuid", uuid.toString())
+        addProperty("url", url)
+        addProperty("obfuscated", obfuscatedHash)
+        addProperty("unobfuscated", unobfuscatedHash)
+    }
 }
