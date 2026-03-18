@@ -1,12 +1,5 @@
-package com.nexomc.nexoproxy
+package com.nexomc.nexoproxy.glyphs
 
-import com.github.retrooper.packetevents.event.PacketListenerAbstract
-import com.github.retrooper.packetevents.event.PacketSendEvent
-import com.github.retrooper.packetevents.protocol.packettype.PacketType
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerListHeaderAndFooter
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerScoreboardObjective
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerTeams
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
@@ -15,7 +8,6 @@ object GlyphStore {
     @Volatile var enabled: Boolean = true
     val glyphComponents: MutableMap<String, Component> = mutableMapOf()
     val GLYPH_CHANNEL = MinecraftChannelIdentifier.from("nexo:glyph_info")
-    const val HANDSHAKE_CHANNEL = "nexo:proxy_handshake"
 }
 
 private val GLYPH_TAG = Regex("<glyph:([^>]+)>")
@@ -132,65 +124,4 @@ private fun resolveChildrenGlyphs(children: List<Component>): List<Component> {
     flushBuffer()
 
     return if (result == children) children else result
-}
-
-object GlyphPacketListener : PacketListenerAbstract() {
-
-    override fun onPacketSend(event: PacketSendEvent) {
-        if (!GlyphStore.enabled || GlyphStore.glyphComponents.isEmpty()) return
-
-        when (event.packetType) {
-
-            PacketType.Play.Server.PLAYER_LIST_HEADER_AND_FOOTER -> {
-                val packet = WrapperPlayServerPlayerListHeaderAndFooter(event)
-                val header = packet.header.resolveGlyphs()
-                val footer = packet.footer.resolveGlyphs()
-                if (header !== packet.header || footer !== packet.footer) {
-                    packet.header = header
-                    packet.footer = footer
-                }
-            }
-
-            // Individual player name entries in the tab list (used by TAB/Velocitab
-            // to set custom display names per player row)
-            PacketType.Play.Server.PLAYER_INFO_UPDATE -> {
-                val packet = WrapperPlayServerPlayerInfoUpdate(event)
-                var dirty = false
-                val updatedEntries = packet.entries.map { entry ->
-                    val original = entry.displayName ?: return@map entry
-                    val resolved = original.resolveGlyphs()
-                    if (resolved === original) return@map entry
-                    dirty = true
-                    entry.displayName = resolved
-                    entry
-                }
-                if (dirty) packet.entries = updatedEntries
-            }
-
-            PacketType.Play.Server.SCOREBOARD_OBJECTIVE -> {
-                val packet = WrapperPlayServerScoreboardObjective(event)
-                if (packet.mode == WrapperPlayServerScoreboardObjective.ObjectiveMode.REMOVE) return
-                packet.displayName = packet.displayName.resolveGlyphs()
-            }
-
-            PacketType.Play.Server.TEAMS -> {
-                val packet = WrapperPlayServerTeams(event)
-                packet.teamInfo.ifPresent { info ->
-                    var dirty = false
-
-                    val displayName = info.displayName.resolveGlyphs()
-                    val prefix = info.prefix.resolveGlyphs()
-                    val suffix = info.suffix.resolveGlyphs()
-
-                    if (displayName !== info.displayName) { info.displayName = displayName; dirty = true }
-                    if (prefix !== info.prefix) { info.prefix = prefix; dirty = true }
-                    if (suffix !== info.suffix) { info.suffix = suffix; dirty = true }
-
-                    if (dirty) packet.setTeamInfo(info)
-                }
-            }
-
-            else -> return
-        }
-    }
 }

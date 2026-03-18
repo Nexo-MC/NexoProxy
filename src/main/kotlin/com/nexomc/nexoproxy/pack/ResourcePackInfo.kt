@@ -1,4 +1,4 @@
-package com.nexomc.nexoproxy
+package com.nexomc.nexoproxy.pack
 
 import com.google.gson.JsonObject
 import java.util.UUID

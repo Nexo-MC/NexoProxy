@@ -19,13 +19,16 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.codemc.io/repository/maven-releases/")
+    maven("https://repo.opencollab.dev/maven-snapshots")
 }
 
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
+    compileOnly("com.velocitypowered:velocity-proxy:3.5.0-SNAPSHOT")
+    compileOnly("io.netty:netty-all:4.2.10.Final")
+
     kapt("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
     implementation("com.charleskorn.kaml:kaml:0.67.0")
-    implementation("com.github.retrooper:packetevents-velocity:2.11.2")
     implementation("org.bstats:bstats-velocity:3.1.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 }
@@ -40,6 +43,7 @@ tasks {
 
     shadowJar {
         relocate("org.bstats", "com.nexomc.nexoproxy.bstats")
+        relocate("com.github.retrooper", "com.nexomc.nexoproxy")
         destinationDirectory.set(File(copyJarPath))
     }
 

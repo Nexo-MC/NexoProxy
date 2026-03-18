@@ -1,5 +1,6 @@
-package com.nexomc.nexoproxy
+package com.nexomc.nexoproxy.pack
 
+import com.nexomc.nexoproxy.pack.ResourcePackInfo
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import java.util.UUID
 
