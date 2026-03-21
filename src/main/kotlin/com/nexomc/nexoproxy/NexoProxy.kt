@@ -55,7 +55,7 @@ class NexoProxy @Inject constructor(
         loadPacks()
         GlyphStore.enabled = config.glyphs
 
-        proxyServer.eventManager.register(this, PlayerFinishedConfigurationEvent::class.java, LoginListener(config, logger))
+        proxyServer.eventManager.register(this, LoginEvent::class.java, LoginListener(config, logger))
         proxyServer.eventManager.register(this, DisconnectEvent::class.java, -404, DisconnectListener(config, logger))
 
 
