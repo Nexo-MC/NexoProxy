@@ -19,6 +19,9 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.opencollab.dev/maven-snapshots")
+    maven("https://repo.nexomc.com/releases/")
+    maven("https://repo.nexomc.com/snapshots/")
+    mavenLocal()
 }
 
 dependencies {
@@ -30,6 +33,8 @@ dependencies {
     implementation("com.charleskorn.kaml:kaml:0.67.0")
     implementation("org.bstats:bstats-velocity:3.1.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    implementation("team.unnamed:creative-api:1.13.0")
+    implementation("team.unnamed:creative-serializer-minecraft:1.13.0")
 }
 
 tasks {
@@ -42,6 +47,7 @@ tasks {
 
     shadowJar {
         relocate("org.bstats", "com.nexomc.nexoproxy.bstats")
+        relocate("team.unnamed", "com.nexomc.nexoproxy.unnamed")
         destinationDirectory.set(File(copyJarPath))
     }
 
