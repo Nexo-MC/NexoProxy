@@ -8,6 +8,7 @@ import com.velocitypowered.proxy.protocol.packet.BossBarPacket
 import com.velocitypowered.proxy.protocol.packet.HeaderAndFooterPacket
 import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket
 import com.velocitypowered.proxy.protocol.packet.chat.ComponentHolder
+import com.velocitypowered.proxy.protocol.packet.chat.SystemChatPacket
 import com.velocitypowered.proxy.protocol.packet.title.LegacyTitlePacket
 import com.velocitypowered.proxy.protocol.packet.title.TitleActionbarPacket
 import com.velocitypowered.proxy.protocol.packet.title.TitleSubtitlePacket
@@ -99,6 +100,9 @@ internal class NexoChannelHandler(
         }
         registerReader<BossBarPacket> { packet ->
             packet.name = packet.name?.resolveGlyphs()
+        }
+        registerReader<SystemChatPacket> { packet ->
+            packet.component.resolveGlyphs()
         }
     }
 
