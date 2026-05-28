@@ -132,15 +132,10 @@ fun Component.resolveGlyphs(): Component {
     return when (this) {
         is TextComponent -> {
             val content = content()
-            val parts = resolveTextContent(content)
+            val allParts = resolveTextContent(content)?.plus(resolvedChildren)?.toTypedArray()
+                ?: return this.takeIf { resolvedChildren == children() } ?: children(resolvedChildren)
 
-            if (parts == null) {
-                if (resolvedChildren == children()) return this
-                return children(resolvedChildren)
-            }
-
-            val allParts = parts + resolvedChildren
-            Component.text("").style(style()).children(allParts)
+            Component.textOfChildren(*allParts)
         }
         else -> when (resolvedChildren) {
             children() -> this
