@@ -9,10 +9,6 @@ import com.velocitypowered.api.scoreboard.NumberFormat
 
 class ScoreboardListener {
 
-    init {
-        println("ScoreboardListener init")
-    }
-
     @Subscribe
     fun TeamEvent.Register.onScoreboardEvent() {
         if (!isMutable) return
