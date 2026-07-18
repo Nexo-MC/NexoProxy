@@ -21,7 +21,7 @@ class ResourcePackListener(val plugin: NexoProxy) {
         when (identifier.id) {
 
             // Pack obfuscation mapping from a backend Nexo server
-            NexoPackHelpers.PACK_HASH_CHANNEL.id if (plugin.config.resourcePacks) -> {
+            NexoPackHelpers.PACK_HASH_CHANNEL_NAME if (plugin.config.resourcePacks) -> {
                 val json = JsonParser.parseString(data.decodeToString()).asJsonObject
                 val pack = ResourcePackInfo(json)
                 NexoPackHelpers.addMapping(pack)
