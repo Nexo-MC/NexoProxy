@@ -101,8 +101,8 @@ internal class NexoChannelHandler(
         registerReader<BossBarPacket> { packet ->
             packet.name = packet.name?.resolveGlyphs()
         }
-        registerReader<SystemChatPacket> { packet ->
-            packet.component.resolveGlyphs()
+        registerTransformer<SystemChatPacket> { packet ->
+            SystemChatPacket(packet.component.resolveGlyphs(), packet.type)
         }
     }
 
