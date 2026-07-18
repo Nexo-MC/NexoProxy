@@ -13,7 +13,7 @@ plugins {
 
 val copyJarPath = project.findProperty("proxy_velocity_plugin_path").toString()
 group = "com.nexomc"
-version = "1.2"
+version = "1.2.1"
 
 repositories {
     mavenCentral()
