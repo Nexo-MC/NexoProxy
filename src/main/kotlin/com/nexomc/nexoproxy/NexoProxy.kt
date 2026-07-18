@@ -70,7 +70,7 @@ class NexoProxy @Inject constructor(
         proxyServer.eventManager.register(this, DisconnectEvent::class.java, -404, DisconnectListener(this))
 
 
-        proxyServer.channelRegistrar.register(NexoPackHelpers.PACK_HASH_CHANNEL)
+        proxyServer.channelRegistrar.register(MinecraftChannelIdentifier.from(NexoPackHelpers.PACK_HASH_CHANNEL_NAME))
         proxyServer.eventManager.register(this, ResourcePackListener(this))
 
         proxyServer.channelRegistrar.register(GlyphStore.GLYPH_CHANNEL, HANDSHAKE_CHANNEL)
