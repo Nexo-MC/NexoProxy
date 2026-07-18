@@ -1,6 +1,5 @@
 package com.nexomc.nexoproxy.glyphs
 
-import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
@@ -12,7 +11,10 @@ import net.kyori.adventure.text.format.TextColor
 object GlyphStore {
     @Volatile var enabled: Boolean = true
     val glyphs: MutableMap<String, ProxyGlyph> = mutableMapOf()
-    val GLYPH_CHANNEL = MinecraftChannelIdentifier.from("nexo:glyph_info")
+    // Plain string, not a MinecraftChannelIdentifier - shared with the Bungee side, whose runtime
+    // classpath has no Velocity classes at all. A Velocity-typed eager field here would throw
+    // NoClassDefFoundError the instant anything touches this object on Bungee.
+    const val GLYPH_CHANNEL_NAME = "nexo:glyph_info"
 }
 
 data class ProxyGlyph(

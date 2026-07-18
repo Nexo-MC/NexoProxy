@@ -44,8 +44,21 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("team.unnamed:creative-api:1.13.0")
     implementation("team.unnamed:creative-serializer-minecraft:1.13.0")
+    // BungeeCord doesn't provide Adventure at runtime like Velocity does, so it has to be bundled here.
+    // Pinned to the same version Velocity's own dependency chain resolves to (see compileClasspath), and
+    // deliberately NOT relocated: relocating net.kyori would rewrite the shared GlyphHandler.kt's own
+    // bytecode references too, breaking it on Velocity (whose platform-provided Adventure classes stay
+    // at net.kyori.*, unrelocated). These are compileOnly on the Velocity side, so nothing of Velocity's
+    // ever ends up bundled here to begin with - only Bungee's copy does.
+    implementation("net.kyori:adventure-api:4.26.1")
+    implementation("net.kyori:adventure-text-serializer-gson:4.26.1")
 
     testImplementation(kotlin("test-junit5"))
+    // compileOnly isn't visible to the test source set by default, and tests actually construct real
+    // BaseComponent/TextComponent instances (see BungeeGlyphsTest), so this needs runtime too, not just
+    // compile-time visibility.
+    testCompileOnly("net.md-5:bungeecord-api:1.21-R0.4")
+    testRuntimeOnly("net.md-5:bungeecord-api:1.21-R0.4")
 }
 
 tasks {

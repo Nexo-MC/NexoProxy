@@ -13,7 +13,8 @@ import net.md_5.bungee.api.connection.ProxiedPlayer
  * silently no-op instead of throwing.
  */
 internal object BungeeChannelInjector {
-    const val HANDLER_NAME = "nexoproxy-resourcepack"
+    const val RESOURCE_PACK_HANDLER = "nexoproxy-resourcepack"
+    const val GLYPH_HANDLER = "nexoproxy-glyphs"
 
     // net.md_5.bungee.netty.PipelineUtils.PACKET_ENCODER - stable, long-lived internal constant name.
     private const val PACKET_ENCODER = "packet-encoder"
@@ -31,20 +32,20 @@ internal object BungeeChannelInjector {
         return getHandle?.invoke(wrapper) as? Channel
     }
 
-    fun inject(player: ProxiedPlayer, handler: ChannelHandler) {
+    fun inject(player: ProxiedPlayer, name: String, handler: ChannelHandler) {
         val channel = channel(player) ?: return
         channel.eventLoop().execute {
-            if (channel.pipeline()[HANDLER_NAME] == null) {
-                channel.pipeline().addBefore(PACKET_ENCODER, HANDLER_NAME, handler)
+            if (channel.pipeline()[name] == null) {
+                channel.pipeline().addBefore(PACKET_ENCODER, name, handler)
             }
         }
     }
 
-    fun uninject(player: ProxiedPlayer) {
+    fun uninject(player: ProxiedPlayer, name: String) {
         val channel = channel(player) ?: return
         channel.eventLoop().execute {
-            if (channel.pipeline()[HANDLER_NAME] != null) {
-                channel.pipeline().remove(HANDLER_NAME)
+            if (channel.pipeline()[name] != null) {
+                channel.pipeline().remove(name)
             }
         }
     }

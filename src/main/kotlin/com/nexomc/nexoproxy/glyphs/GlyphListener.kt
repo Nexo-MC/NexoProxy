@@ -16,7 +16,7 @@ class GlyphListener(val plugin: NexoProxy) {
     @Subscribe
     fun PluginMessageEvent.onPluginMessage() {
         when (identifier.id) {
-            GlyphStore.GLYPH_CHANNEL.id if (plugin.config.glyphs) -> {
+            GlyphStore.GLYPH_CHANNEL_NAME if (plugin.config.glyphs) -> {
                 val json = JsonParser.parseString(data.decodeToString()).asJsonObject
 
                 // Check for shift font override

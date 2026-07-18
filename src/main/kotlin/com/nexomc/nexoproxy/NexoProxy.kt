@@ -73,7 +73,7 @@ class NexoProxy @Inject constructor(
         proxyServer.channelRegistrar.register(MinecraftChannelIdentifier.from(NexoPackHelpers.PACK_HASH_CHANNEL_NAME))
         proxyServer.eventManager.register(this, ResourcePackListener(this))
 
-        proxyServer.channelRegistrar.register(GlyphStore.GLYPH_CHANNEL, HANDSHAKE_CHANNEL)
+        proxyServer.channelRegistrar.register(MinecraftChannelIdentifier.from(GlyphStore.GLYPH_CHANNEL_NAME), HANDSHAKE_CHANNEL)
         proxyServer.eventManager.register(this, GlyphListener(this))
 
         if (isScoreboardApiPresent) proxyServer.eventManager.register(this, ScoreboardListener())

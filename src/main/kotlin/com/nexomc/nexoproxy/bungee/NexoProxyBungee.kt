@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import com.nexomc.nexoproxy.NexoConfig
+import com.nexomc.nexoproxy.glyphs.GlyphStore
 import com.nexomc.nexoproxy.pack.NexoPackHelpers
 import com.nexomc.nexoproxy.pack.ResourcePackInfo
 import net.md_5.bungee.api.CommandSender
@@ -13,9 +14,9 @@ import org.bstats.bungeecord.Metrics
 import java.nio.file.Files
 
 /**
- * BungeeCord support for NexoProxy - resource pack dedup only (see BUNGEE.md for what's deliberately
- * out of scope). Reuses NexoConfig/ResourcePackInfo/NexoPackHelpers as-is; they have no Velocity-specific
- * imports and behave identically here.
+ * BungeeCord support for NexoProxy - see BUNGEE.md. Reuses NexoConfig/ResourcePackInfo/NexoPackHelpers/
+ * GlyphStore/GlyphHandler/Shift as-is; none of them have Velocity-specific imports and all behave
+ * identically here.
  */
 class NexoProxyBungee : Plugin() {
 
@@ -25,10 +26,6 @@ class NexoProxyBungee : Plugin() {
     private val packsFile get() = dataFolder.toPath().resolve(".packs.json")
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
-    companion object {
-        const val PACK_HASH_CHANNEL = "nexo:pack_hash"
-    }
-
     override fun onEnable() {
         Metrics(this, 30155)
         config = NexoConfig.loadConfig(dataFolder.toPath())
@@ -36,14 +33,16 @@ class NexoProxyBungee : Plugin() {
 
         proxy.pluginManager.registerListener(this, NexoProxyBungeeListener(this))
         proxy.pluginManager.registerCommand(this, NexoProxyBungeeCommand(this))
-        proxy.registerChannel(PACK_HASH_CHANNEL)
+        proxy.registerChannel(NexoPackHelpers.PACK_HASH_CHANNEL_NAME)
+        proxy.registerChannel(GlyphStore.GLYPH_CHANNEL_NAME)
 
-        logger.info("NexoProxy enabled on BungeeCord (resource pack dedup only - see BUNGEE.md)")
+        logger.info("NexoProxy enabled on BungeeCord - see BUNGEE.md")
     }
 
     override fun onDisable() {
         savePacks()
-        proxy.unregisterChannel(PACK_HASH_CHANNEL)
+        proxy.unregisterChannel(NexoPackHelpers.PACK_HASH_CHANNEL_NAME)
+        proxy.unregisterChannel(GlyphStore.GLYPH_CHANNEL_NAME)
     }
 
     fun reload(source: CommandSender) {
