@@ -12,13 +12,14 @@ class NexoProxyCommand(private val plugin: NexoProxy) : SimpleCommand {
             "debug" -> {
                 plugin.config = plugin.config.copy(debug = !plugin.config.debug)
                 plugin.config.saveConfig(plugin.dataDirectory)
+                invocation.source().sendMessage(Component.text("[NexoProxy] Debug mode: ${if (plugin.config.debug) "ON" else "OFF"}"))
             }
-            else -> invocation.source().sendMessage(Component.text("Usage: /nexoproxy reload|rl"))
+            else -> invocation.source().sendMessage(Component.text("Usage: /nexoproxy reload|rl|debug"))
         }
     }
 
     override fun suggest(invocation: SimpleCommand.Invocation): List<String> {
-        return if (invocation.arguments().size <= 1) listOf("reload", "rl") else emptyList()
+        return if (invocation.arguments().size <= 1) listOf("reload", "rl", "debug") else emptyList()
     }
 
     override fun hasPermission(invocation: SimpleCommand.Invocation): Boolean {
