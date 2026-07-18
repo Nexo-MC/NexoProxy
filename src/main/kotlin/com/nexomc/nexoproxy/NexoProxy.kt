@@ -67,7 +67,7 @@ class NexoProxy @Inject constructor(
             ?.description?.version?.getOrNull()?.firstOrNull()?.digitToIntOrNull() ?: 0) >= 2
 
         proxyServer.eventManager.register(this, LoginEvent::class.java, LoginListener(this))
-        proxyServer.eventManager.register(this, DisconnectEvent::class.java, -404, DisconnectListener(config, logger))
+        proxyServer.eventManager.register(this, DisconnectEvent::class.java, -404, DisconnectListener(this))
 
 
         proxyServer.channelRegistrar.register(NexoPackHelpers.PACK_HASH_CHANNEL)
