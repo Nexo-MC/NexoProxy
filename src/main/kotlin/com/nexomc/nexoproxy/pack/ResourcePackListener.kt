@@ -71,7 +71,8 @@ class ResourcePackListener(val plugin: NexoProxy) {
     fun ServerResourcePackSendEvent.onPackSend() {
         if (!plugin.config.resourcePacks) return
         val player = serverConnection.player
-        val incomingId = receivedResourcePack.hash?.toHexString()?.trim()!!
+        val incomingId = receivedResourcePack.hash?.toHexString()?.trim()
+            ?: return debugLog("Received resource pack with no hash for ${player.username}, allowing through")
 
         val (unobf, obf) = NexoPackHelpers.findMappingByHash(incomingId)
             ?: return debugLog("Non NexoPack $incomingId for ${player.username}, allowing through")
