@@ -22,6 +22,8 @@ repositories {
     maven("https://repo.nexomc.com/releases/")
     maven("https://repo.nexomc.com/snapshots/")
     maven("https://repo.william278.net/releases")
+    maven("https://oss.sonatype.org/content/repositories/snapshots") // BungeeCord transitive deps
+    maven("https://libraries.minecraft.net")                          // BungeeCord transitive deps
     mavenLocal()
 }
 
@@ -31,21 +33,37 @@ dependencies {
     compileOnly("io.netty:netty-all:4.2.10.Final")
     compileOnly("net.william278:velocitab:1.5.2")
     compileOnly("net.william278:velocityscoreboardapi:2.0.0")
+    // BungeeCord support: resource pack dedup only (see BUNGEE.md) - no typed packet API for resource
+    // pack push/pop, unlike Velocity, so that part reads/writes raw packets directly.
+    compileOnly("net.md-5:bungeecord-api:1.21-R0.4")
 
     kapt("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
     implementation("com.charleskorn.kaml:kaml:0.67.0")
     implementation("org.bstats:bstats-velocity:3.1.0")
+    implementation("org.bstats:bstats-bungeecord:3.1.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("team.unnamed:creative-api:1.13.0")
     implementation("team.unnamed:creative-serializer-minecraft:1.13.0")
+
+    testImplementation(kotlin("test-junit5"))
 }
 
 tasks {
+    test {
+        useJUnitPlatform()
+    }
+
     runVelocity {
         // Configure the Velocity version for our task.
         // This is the only required configuration besides applying the plugin.
         // Your plugin's jar (or shadowJar if present) will be used automatically.
         velocityVersion("3.5.0-SNAPSHOT")
+    }
+
+    processResources {
+        filesMatching("bungee.yml") {
+            expand("version" to project.version)
+        }
     }
 
     shadowJar {

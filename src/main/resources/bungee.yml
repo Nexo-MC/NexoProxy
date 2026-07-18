@@ -1,0 +1,12 @@
+name: NexoProxy
+main: com.nexomc.nexoproxy.bungee.NexoProxyBungee
+version: '${version}'
+author: boy0000
+description: BungeeCord support for NexoProxy - resource pack dedup only, see BUNGEE.md.
+permissions:
+  nexoproxy.admin:
+    default: op
+commands:
+  nexoproxy:
+    aliases: [ nxp ]
+    permission: nexoproxy.admin
