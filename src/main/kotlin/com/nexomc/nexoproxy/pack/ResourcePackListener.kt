@@ -74,18 +74,24 @@ class ResourcePackListener(val plugin: NexoProxy) {
         val incomingId = receivedResourcePack.hash?.toHexString()?.trim()
             ?: return debugLog("Received resource pack with no hash for ${player.username}, allowing through")
 
-        val (unobf, obf) = NexoPackHelpers.findMappingByHash(incomingId)
+        val incoming = NexoPackHelpers.findMappingByHash(incomingId)
             ?: return debugLog("Non NexoPack $incomingId for ${player.username}, allowing through")
+        val (unobf, obf) = incoming
 
-        val currentUnobfId = NexoPackHelpers.packHashTracker[player.uniqueId]
+        val current = NexoPackHelpers.packHashTracker[player.uniqueId]
 
-        if (currentUnobfId == unobf) {
+        if (current?.unobfuscatedHash == unobf) {
             result = ResultedEvent.GenericResult.denied()
             debugLog("Denied duplicate NexoPack-send for ${player.username}: unobfuscated=${unobf}, already loaded")
             return
         }
 
-        NexoPackHelpers.packHashTracker[player.uniqueId] = unobf
+        if (current != null && current.obfuscatedUuid != incoming.obfuscatedUuid) {
+            player.removeResourcePacks(current.obfuscatedUuid)
+            debugLog("Removed superseded NexoPack for ${player.username}: unobfuscated=${current.unobfuscatedHash}")
+        }
+
+        NexoPackHelpers.packHashTracker[player.uniqueId] = incoming
         debugLog("Sending Nexo pack to ${player.username}: unobfuscated=${unobf}, obfuscated=${obf}")
     }
 }
