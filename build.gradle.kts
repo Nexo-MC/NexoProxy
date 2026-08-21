@@ -19,6 +19,7 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.opencollab.dev/maven-snapshots")
+    maven("https://repo.opencollab.dev/maven-releases")
     maven("https://repo.nexomc.com/releases/")
     maven("https://repo.nexomc.com/snapshots/")
     maven("https://repo.william278.net/releases")
@@ -31,6 +32,8 @@ dependencies {
     compileOnly("io.netty:netty-all:4.2.10.Final")
     compileOnly("net.william278:velocitab:1.5.2")
     compileOnly("net.william278:velocityscoreboardapi:2.0.0")
+    compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
+    compileOnly("org.geysermc.geyser:api:2.11.2-SNAPSHOT")
 
     kapt("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
     implementation("com.charleskorn.kaml:kaml:0.67.0")

@@ -1,6 +1,7 @@
 package com.nexomc.nexoproxy.packets
 
 import com.nexomc.nexoproxy.NexoProxy
+import com.nexomc.nexoproxy.glyphs.BedrockGlyphs
 import com.nexomc.nexoproxy.glyphs.resolveGlyphs
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.proxy.protocol.MinecraftPacket
@@ -16,6 +17,7 @@ import com.velocitypowered.proxy.protocol.packet.title.TitleTextPacket
 import io.netty.channel.ChannelDuplexHandler
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelPromise
+import net.kyori.adventure.text.Component
 import net.william278.velocitab.packet.UpdateTeamsPacket
 import org.jspecify.annotations.NullMarked
 
@@ -75,10 +77,14 @@ internal class NexoChannelHandler(
             HeaderAndFooterPacket(packet.header.resolveGlyphs(), packet.footer.resolveGlyphs())
         }
 
-        if (plugin.isVelocitabPresent) registerReader<UpdateTeamsPacket> { packet ->
-            packet.displayName(packet.displayName()?.resolveGlyphs())
-            packet.prefix(packet.prefix()?.resolveGlyphs())
-            packet.suffix(packet.suffix()?.resolveGlyphs())
+        // Velocitab hands the same packet instance to every viewer, so the Bedrock remap goes on a copy
+        if (plugin.isVelocitabPresent) registerTransformer<UpdateTeamsPacket> { packet ->
+            UpdateTeamsPacket(
+                packet.plugin(), packet.teamName(), packet.mode(),
+                packet.displayName()?.resolveGlyphsForPlayer(), packet.friendlyFlags(), packet.nametagVisibility(),
+                packet.collisionRule(), packet.color(),
+                packet.prefix()?.resolveGlyphsForPlayer(), packet.suffix()?.resolveGlyphsForPlayer(), packet.entities()
+            )
         }
 
         registerReader<UpsertPlayerInfoPacket> { packet ->
@@ -106,8 +112,10 @@ internal class NexoChannelHandler(
         }
     }
 
+    private fun Component.resolveGlyphsForPlayer(): Component = BedrockGlyphs.remapForBedrock(resolveGlyphs(), player)
+
     private fun ComponentHolder.resolveGlyphs(): ComponentHolder {
-        return ComponentHolder(player.protocolVersion, component.resolveGlyphs())
+        return ComponentHolder(player.protocolVersion, component.resolveGlyphsForPlayer())
     }
 
     companion object {

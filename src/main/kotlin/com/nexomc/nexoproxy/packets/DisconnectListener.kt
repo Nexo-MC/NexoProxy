@@ -1,6 +1,7 @@
 package com.nexomc.nexoproxy.packets
 
 import com.nexomc.nexoproxy.NexoProxy
+import com.nexomc.nexoproxy.glyphs.BedrockPlayers
 import com.velocitypowered.api.event.AwaitingEventExecutor
 import com.velocitypowered.api.event.EventTask
 import com.velocitypowered.api.event.connection.DisconnectEvent
@@ -13,6 +14,7 @@ import com.velocitypowered.proxy.connection.client.ConnectedPlayer
 class DisconnectListener(val plugin: NexoProxy) : AwaitingEventExecutor<DisconnectEvent> {
 
     override fun executeAsync(event: DisconnectEvent): EventTask? {
+        BedrockPlayers.forget(event.player.uniqueId)
         if (!plugin.config.glyphs) return null
         return EventTask.async { uninjectPlayer(event.player) }
     }

@@ -4,6 +4,9 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import com.google.inject.Inject
+import com.nexomc.nexoproxy.glyphs.BedrockGlyphs
+import com.nexomc.nexoproxy.glyphs.BedrockPlayers
+import com.nexomc.nexoproxy.glyphs.GlyphCache
 import com.nexomc.nexoproxy.glyphs.GlyphListener
 import com.nexomc.nexoproxy.pack.NexoPackHelpers
 import com.nexomc.nexoproxy.pack.ResourcePackListener
@@ -74,7 +77,10 @@ class NexoProxy @Inject constructor(
         proxyServer.eventManager.register(this, ResourcePackListener(this))
 
         proxyServer.channelRegistrar.register(GlyphStore.GLYPH_CHANNEL, HANDSHAKE_CHANNEL)
+        proxyServer.channelRegistrar.register(BedrockGlyphs.TABLE_CHANNEL, BedrockGlyphs.HANDSHAKE_CHANNEL)
         proxyServer.eventManager.register(this, GlyphListener(this))
+        BedrockPlayers.init(proxyServer)
+        if (config.glyphs) GlyphCache.load(this)
 
         if (isScoreboardApiPresent) proxyServer.eventManager.register(this, ScoreboardListener())
 
@@ -89,6 +95,7 @@ class NexoProxy @Inject constructor(
         val server = player.currentServer.getOrNull() ?: return
         if (server.server.playersConnected.size != 1) return
         server.sendPluginMessage(HANDSHAKE_CHANNEL, byteArrayOf())
+        server.sendPluginMessage(BedrockGlyphs.HANDSHAKE_CHANNEL, byteArrayOf())
     }
 
     @Subscribe
