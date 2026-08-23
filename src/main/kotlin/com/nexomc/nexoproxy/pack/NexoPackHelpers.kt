@@ -1,41 +1,37 @@
 package com.nexomc.nexoproxy.pack
 
-import com.nexomc.nexoproxy.pack.ResourcePackInfo
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 typealias PlayerUUID = UUID
 typealias PackUUID = UUID
 
 object NexoPackHelpers {
-    private val byObfHash: MutableMap<String, ResourcePackInfo> = mutableMapOf()
-    private val byUnobfHash: MutableMap<String, ResourcePackInfo> = mutableMapOf()
-    private val byObfUuid: MutableMap<UUID, ResourcePackInfo> = mutableMapOf()
-    private val byPackUuid: MutableMap<PackUUID, ResourcePackInfo> = mutableMapOf()
+    private val byObfHash: MutableMap<String, ResourcePackInfo> = ConcurrentHashMap()
+    private val byObfUuid: MutableMap<UUID, ResourcePackInfo> = ConcurrentHashMap()
 
-    // packUuid is what the client holds and what a removal must target
-    data class AppliedPack(val unobfuscatedHash: String, val packUuid: PackUUID)
+    // packUuid is what the client holds and what a removal must target, server is the last one to have sent it
+    data class AppliedPack(val dedupHash: String, val packUuid: PackUUID, val server: String, val isTemplate: Boolean)
 
-    internal val packHashTracker: MutableMap<PlayerUUID, AppliedPack> = mutableMapOf()
+    internal val packHashTracker: MutableMap<PlayerUUID, MutableMap<String, AppliedPack>> = ConcurrentHashMap()
+
+    internal val nexoServers: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     val PACK_HASH_CHANNEL: MinecraftChannelIdentifier = MinecraftChannelIdentifier.from("nexo:pack_hash")
 
-    // A pack gets re-registered with a new hash every time it's rebuilt, same uuid.
-    // Drop the old hash/uuid entries for that uuid first or these maps just grow forever.
     fun addMapping(pack: ResourcePackInfo) {
-        byPackUuid.remove(pack.uuid)?.let { stale ->
-            byObfHash.remove(stale.obfuscatedHash)
-            byUnobfHash.remove(stale.unobfuscatedHash)
-            byObfUuid.remove(stale.obfuscatedUuid)
-        }
         byObfHash[pack.obfuscatedHash] = pack
-        byUnobfHash[pack.unobfuscatedHash] = pack
         byObfUuid[pack.obfuscatedUuid] = pack
-        byPackUuid[pack.uuid] = pack
     }
 
-    val allMappings: Collection<ResourcePackInfo> get() = byPackUuid.values
+    val allMappings: Collection<ResourcePackInfo> get() = byObfHash.values
 
-    fun findMappingByHash(hash: String): ResourcePackInfo? = byObfHash[hash] ?: byUnobfHash[hash]
+    fun findMappingByHash(hash: String): ResourcePackInfo? =
+        byObfHash[hash] ?: byObfHash.values.find { it.unobfuscatedHash == hash }
 
     fun findMappingByUUID(uuid: UUID): ResourcePackInfo? = byObfUuid[uuid]
+
+    fun trackedPacks(player: PlayerUUID): MutableMap<String, AppliedPack> =
+        packHashTracker.getOrPut(player) { ConcurrentHashMap() }
 }

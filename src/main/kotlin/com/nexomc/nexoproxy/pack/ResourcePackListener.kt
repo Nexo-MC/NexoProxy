@@ -6,9 +6,11 @@ import com.velocitypowered.api.event.ResultedEvent
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.connection.DisconnectEvent
 import com.velocitypowered.api.event.connection.PluginMessageEvent
+import com.velocitypowered.api.event.player.ServerPostConnectEvent
 import com.velocitypowered.api.event.player.ServerResourcePackRemoveEvent
 import com.velocitypowered.api.event.player.ServerResourcePackSendEvent
 import com.velocitypowered.api.proxy.ServerConnection
+import kotlin.jvm.optionals.getOrNull
 
 class ResourcePackListener(val plugin: NexoProxy) {
 
@@ -25,9 +27,12 @@ class ResourcePackListener(val plugin: NexoProxy) {
                 val json = JsonParser.parseString(data.decodeToString()).asJsonObject
                 val pack = ResourcePackInfo(json)
                 NexoPackHelpers.addMapping(pack)
+                val templates = json.getAsJsonArray("templates")?.map { it.asString }.orEmpty()
+                templates.forEach { hash -> NexoPackHelpers.addMapping(ResourcePackInfo(hash)) }
                 result = PluginMessageEvent.ForwardResult.handled()
                 val serverName = (source as ServerConnection).serverInfo.name
-                debugLog("Registered pack mapping: ${pack.unobfuscatedHash} -> ${pack.obfuscatedHash} from $serverName")
+                NexoPackHelpers.nexoServers += serverName
+                debugLog("Registered pack mapping: ${pack.unobfuscatedHash} -> ${pack.obfuscatedHash} (+${templates.size} template(s)) from $serverName")
             }
         }
     }
@@ -38,16 +43,13 @@ class ResourcePackListener(val plugin: NexoProxy) {
         NexoPackHelpers.packHashTracker.remove(player.uniqueId)
     }
 
-    // Intercept all resource pack removes.
-    // We deny removes for any pack we recognise as a Nexo pack.
-    // If a different Nexo pack is incoming, the send event removes the previous one before letting it through.
-    // If the same pack is incoming, we'd deny that too, so the remove is moot.
-    // Non-Nexo packs (packId not in our mappings) are always allowed through.
+    // Intercept all resource pack removes, denying any pack we recognise as a Nexo pack
+    // The proxy removes stale ones itself, main packs when a different one is sent, templates on server switch
     @Subscribe
     fun ServerResourcePackRemoveEvent.onPackRemove() {
         if (!plugin.config.resourcePacks) return
         if (packId == null) {
-            if (NexoPackHelpers.packHashTracker[serverConnection.player.uniqueId] != null) {
+            if (!NexoPackHelpers.packHashTracker[serverConnection.player.uniqueId].isNullOrEmpty()) {
                 result = ResultedEvent.GenericResult.denied()
             }
             return
@@ -56,41 +58,53 @@ class ResourcePackListener(val plugin: NexoProxy) {
         val mapping = NexoPackHelpers.findMappingByUUID(packId!!) ?: return
 
         result = ResultedEvent.GenericResult.denied()
-        debugLog("Denied remove of Nexo pack ${mapping.unobfuscatedHash} for ${serverConnection.player.username}")
+        debugLog("Denied remove of Nexo pack ${mapping.dedupHash} for ${serverConnection.player.username}")
     }
 
-    // Intercept all resource pack sends.
-    // If the pack is a known Nexo pack:
-    //   - Look up the canonical obfuscated version from our mappings
-    //   - Check if the player already has this unobfuscated pack loaded
-    //   - If yes: deny (duplicate, possibly different obfuscation)
-    //   - If no: remove their previous Nexo pack, update tracker, allow
-    // If the pack is not a Nexo pack: always allow through untouched.
     @Subscribe
     fun ServerResourcePackSendEvent.onPackSend() {
         if (!plugin.config.resourcePacks) return
         val player = serverConnection.player
+        val serverName = serverConnection.serverInfo.name
         val incomingId = receivedResourcePack.hash?.toHexString()?.trim()
             ?: return debugLog("Received resource pack with no hash for ${player.username}, allowing through")
 
-        val (unobf, obf) = NexoPackHelpers.findMappingByHash(incomingId)
+        val mapping = NexoPackHelpers.findMappingByHash(incomingId)
             ?: return debugLog("Non NexoPack $incomingId for ${player.username}, allowing through")
 
-        val current = NexoPackHelpers.packHashTracker[player.uniqueId]
-
-        if (current?.unobfuscatedHash == unobf) {
+        val tracked = NexoPackHelpers.trackedPacks(player.uniqueId)
+        tracked[mapping.dedupHash]?.let { existing ->
+            tracked[mapping.dedupHash] = existing.copy(server = serverName)
             result = ResultedEvent.GenericResult.denied()
-            debugLog("Denied duplicate NexoPack-send for ${player.username}: unobfuscated=${unobf}, already loaded")
+            debugLog("Denied duplicate NexoPack-send for ${player.username}: ${mapping.dedupHash}, already loaded")
             return
         }
 
-        // The client stacks packs instead of swapping, remove the previous one so the incoming pack is the only Nexo pack
-        current?.let { previous ->
+        // The client stacks packs instead of swapping, so the previous main pack is removed here
+        // Template packs coexist and are swept on server switch instead
+        if (!mapping.isTemplate) tracked.values.filterNot { it.isTemplate }.forEach { previous ->
             player.removeResourcePacks(previous.packUuid)
-            debugLog("Removed previous Nexo pack ${previous.unobfuscatedHash} from ${player.username}")
+            tracked.remove(previous.dedupHash)
+            debugLog("Removed previous Nexo pack ${previous.dedupHash} from ${player.username}")
         }
 
-        NexoPackHelpers.packHashTracker[player.uniqueId] = NexoPackHelpers.AppliedPack(unobf, receivedResourcePack.id)
-        debugLog("Sending Nexo pack to ${player.username}: unobfuscated=${unobf}, obfuscated=${obf}")
+        tracked[mapping.dedupHash] = NexoPackHelpers.AppliedPack(mapping.dedupHash, receivedResourcePack.id, serverName, mapping.isTemplate)
+        debugLog("Sending Nexo pack to ${player.username}: ${mapping.dedupHash} (template=${mapping.isTemplate})")
+    }
+
+    // The new server has re-sent every pack it wants kept by now, so anything still owned by another server is stale
+    // Servers without pack data never re-send, their players keep whatever they hold
+    @Subscribe
+    fun ServerPostConnectEvent.onServerSwitch() {
+        if (!plugin.config.resourcePacks) return
+        val serverName = player.currentServer.getOrNull()?.serverInfo?.name ?: return
+        if (serverName !in NexoPackHelpers.nexoServers) return
+
+        val tracked = NexoPackHelpers.packHashTracker[player.uniqueId] ?: return
+        tracked.values.filter { it.server != serverName }.forEach { stale ->
+            player.removeResourcePacks(stale.packUuid)
+            tracked.remove(stale.dedupHash)
+            debugLog("Removed stale Nexo pack ${stale.dedupHash} from ${player.username} after switching to $serverName")
+        }
     }
 }
