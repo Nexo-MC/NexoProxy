@@ -40,8 +40,7 @@ class ResourcePackListener(val plugin: NexoProxy) {
 
     // Intercept all resource pack removes.
     // We deny removes for any pack we recognise as a Nexo pack.
-    // if a new *different* Nexo pack is incoming, the send event
-    // will go through and the client handles the swap automatically.
+    // If a different Nexo pack is incoming, the send event removes the previous one before letting it through.
     // If the same pack is incoming, we'd deny that too, so the remove is moot.
     // Non-Nexo packs (packId not in our mappings) are always allowed through.
     @Subscribe
@@ -65,7 +64,7 @@ class ResourcePackListener(val plugin: NexoProxy) {
     //   - Look up the canonical obfuscated version from our mappings
     //   - Check if the player already has this unobfuscated pack loaded
     //   - If yes: deny (duplicate, possibly different obfuscation)
-    //   - If no: swap in the canonical obfuscated URL/hash, update tracker, allow
+    //   - If no: remove their previous Nexo pack, update tracker, allow
     // If the pack is not a Nexo pack: always allow through untouched.
     @Subscribe
     fun ServerResourcePackSendEvent.onPackSend() {
@@ -77,15 +76,21 @@ class ResourcePackListener(val plugin: NexoProxy) {
         val (unobf, obf) = NexoPackHelpers.findMappingByHash(incomingId)
             ?: return debugLog("Non NexoPack $incomingId for ${player.username}, allowing through")
 
-        val currentUnobfId = NexoPackHelpers.packHashTracker[player.uniqueId]
+        val current = NexoPackHelpers.packHashTracker[player.uniqueId]
 
-        if (currentUnobfId == unobf) {
+        if (current?.unobfuscatedHash == unobf) {
             result = ResultedEvent.GenericResult.denied()
             debugLog("Denied duplicate NexoPack-send for ${player.username}: unobfuscated=${unobf}, already loaded")
             return
         }
 
-        NexoPackHelpers.packHashTracker[player.uniqueId] = unobf
+        // The client stacks packs instead of swapping, remove the previous one so the incoming pack is the only Nexo pack
+        current?.let { previous ->
+            player.removeResourcePacks(previous.packUuid)
+            debugLog("Removed previous Nexo pack ${previous.unobfuscatedHash} from ${player.username}")
+        }
+
+        NexoPackHelpers.packHashTracker[player.uniqueId] = NexoPackHelpers.AppliedPack(unobf, receivedResourcePack.id)
         debugLog("Sending Nexo pack to ${player.username}: unobfuscated=${unobf}, obfuscated=${obf}")
     }
 }

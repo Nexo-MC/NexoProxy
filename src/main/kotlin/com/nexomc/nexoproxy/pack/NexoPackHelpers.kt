@@ -13,7 +13,10 @@ object NexoPackHelpers {
     private val byObfUuid: MutableMap<UUID, ResourcePackInfo> = mutableMapOf()
     private val byPackUuid: MutableMap<PackUUID, ResourcePackInfo> = mutableMapOf()
 
-    internal val packHashTracker: MutableMap<PlayerUUID, String> = mutableMapOf()
+    // packUuid is what the client holds and what a removal must target
+    data class AppliedPack(val unobfuscatedHash: String, val packUuid: PackUUID)
+
+    internal val packHashTracker: MutableMap<PlayerUUID, AppliedPack> = mutableMapOf()
     val PACK_HASH_CHANNEL: MinecraftChannelIdentifier = MinecraftChannelIdentifier.from("nexo:pack_hash")
 
     // A pack gets re-registered with a new hash every time it's rebuilt, same uuid.
