@@ -71,8 +71,7 @@ object BedrockGlyphs {
 
     // Tablists can be built before currentServer is set, fall back to the only table when there is a single backend
     private fun tableFor(player: Player): Table? {
-        val server = player.currentServer.getOrNull()?.serverInfo?.name
-        return server?.let(tables::get) ?: tables.values.singleOrNull()
+        return player.currentServer.getOrNull()?.serverInfo?.name?.let(tables::get) ?: tables.values.singleOrNull()
     }
 
     // inherited is the font a parent set, which a stripped parent no longer passes on to its children on the client

@@ -13,6 +13,7 @@ import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ServerConnection
 import com.velocitypowered.api.scheduler.ScheduledTask
 import java.time.Duration
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.jvm.optionals.getOrNull
 
@@ -28,19 +29,34 @@ class ResourcePackListener(val plugin: NexoProxy) {
 
             // Pack obfuscation mapping from a backend Nexo server
             NexoPackHelpers.PACK_HASH_CHANNEL.id if (plugin.config.resourcePacks) -> {
-                val json = JsonParser.parseString(data.decodeToString()).asJsonObject
-                val pack = ResourcePackInfo(json)
-                NexoPackHelpers.addMapping(pack)
-                val templates = json.getAsJsonArray("templates")?.map { it.asString }.orEmpty()
-                templates.forEach { hash -> NexoPackHelpers.addMapping(ResourcePackInfo(hash)) }
                 result = PluginMessageEvent.ForwardResult.handled()
-                val serverName = (source as ServerConnection).serverInfo.name
-                NexoPackHelpers.nexoServers += serverName
-                debugLog("Registered pack mapping: ${pack.unobfuscatedHash} -> ${pack.obfuscatedHash} (+${templates.size} template(s)) from $serverName")
+                // A client could otherwise announce any pack as a Nexo one
+                val serverName = (source as? ServerConnection)?.serverInfo?.name ?: return
+                val announcement = runCatching { parseAnnouncement(data) }.getOrElse {
+                    return plugin.logger.warn("Ignoring malformed pack data from $serverName: ${it.message}")
+                }
+                NexoPackHelpers.announce(serverName, announcement)
+                val main = announcement.main
+                debugLog("Registered pack mapping: ${main.unobfuscatedHash} -> ${main.obfuscatedHash} (+${announcement.templates.size} template(s)) from $serverName")
                 adoptUnrecognisedPacks()
             }
         }
     }
+
+    private fun parseAnnouncement(data: ByteArray): NexoPackHelpers.Announcement {
+        val json = JsonParser.parseString(data.decodeToString()).asJsonObject
+        val obfuscated = json.get("obfuscated").asString.requireHash()
+        val main = ResourcePackInfo(
+            unobfuscatedHash = json.get("unobfuscated")?.asString?.takeIf { it.isNotEmpty() }?.requireHash().orEmpty(),
+            obfuscatedHash = obfuscated,
+            // Nexo sends "null" while its pack-server has no pack info yet
+            uuid = runCatching { UUID.fromString(json.get("uuid").asString) }.getOrElse { UUID.nameUUIDFromBytes(obfuscated.hexToByteArray()) },
+        )
+        val templates = json.getAsJsonArray("templates")?.map { ResourcePackInfo(it.asString.requireHash()) }.orEmpty()
+        return NexoPackHelpers.Announcement(main, templates, json.get("removesTemplates")?.asBoolean == true)
+    }
+
+    private fun String.requireHash(): String = lowercase().also { require(HASH.matches(it)) { "Invalid pack hash $this" } }
 
     // Clean up player state on disconnect
     @Subscribe
@@ -53,7 +69,8 @@ class ResourcePackListener(val plugin: NexoProxy) {
 
     // Removes of the main Nexo pack are denied, it is only ever replaced by a different one
     // Template packs are toggled by the server itself, so those go through like any non-Nexo pack
-    @Subscribe
+    // Not async so removes and sends reach the client in the order the server sent them, a pop-all overtaking the packs after it drops them
+    @Subscribe(async = false)
     fun ServerResourcePackRemoveEvent.onPackRemove() {
         if (!plugin.config.resourcePacks) return
         val player = serverConnection.player
@@ -124,18 +141,24 @@ class ResourcePackListener(val plugin: NexoProxy) {
 
     // A clear-all is how a server re-dispatches its whole set, multipack toggles included
     // Its templates are dropped here so the sends that follow re-add the ones still enabled
+    // A server removing disabled templates itself only needs the ones it no longer builds dropped, the rest would reload for nothing
     private fun dropTemplates(player: Player, tracked: MutableMap<String, NexoPackHelpers.AppliedPack>, serverName: String) {
-        tracked.values.filter { it.isTemplate && it.server == serverName }.forEach { template ->
+        val announcement = NexoPackHelpers.announcement(serverName)
+        tracked.values.filter { it.isTemplate && it.server == serverName }.filter { template ->
+            announcement?.removesTemplates != true || template.dedupHash !in announcement.templateHashes
+        }.forEach { template ->
             player.removeResourcePacks(template.packUuid)
             tracked.remove(template.dedupHash)
             debugLog("Dropped Nexo template-pack ${template.dedupHash} from ${player.username} before $serverName re-sends its set")
         }
     }
 
-    @Subscribe
+    @Subscribe(async = false)
     fun ServerResourcePackSendEvent.onPackSend() {
         if (!plugin.config.resourcePacks) return
         val player = serverConnection.player
+        // Tracking a player whose disconnect was already handled would never be cleaned up
+        if (!player.isActive) return
         val serverName = serverConnection.serverInfo.name
         val incomingId = receivedResourcePack.hash?.toHexString()?.trim()
             ?: return debugLog("Received resource pack with no hash for ${player.username}, allowing through")
@@ -209,6 +232,7 @@ class ResourcePackListener(val plugin: NexoProxy) {
 
     companion object {
         private val SWEEP_DELAY: Duration = Duration.ofSeconds(3)
+        private val HASH = Regex("[0-9a-f]{40}")
         private val pendingSweeps: MutableMap<PlayerUUID, ScheduledTask> = ConcurrentHashMap()
 
         // Players whose main pack was replaced during the set currently being dispatched

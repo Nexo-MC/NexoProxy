@@ -125,7 +125,7 @@ class NexoProxy @Inject constructor(
     private fun savePacks() {
         runCatching {
             Files.createDirectories(dataDirectory)
-            val entries = NexoPackHelpers.allMappings.toList().takeLast(20)
+            val entries = NexoPackHelpers.mappingsToCache(20)
             val array = JsonArray()
             entries.forEach { array.add(it.toJson()) }
             packsFile.toFile().writeText(gson.toJson(array))

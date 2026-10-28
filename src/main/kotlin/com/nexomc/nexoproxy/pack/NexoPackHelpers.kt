@@ -35,16 +35,50 @@ object NexoPackHelpers {
         unrecognisedPacks.getOrPut(player) { ConcurrentHashMap() }[hash] = UnrecognisedPack(packUuid, server, nextSeq())
     }
 
-    internal val nexoServers: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    // removesTemplates is set by Nexo servers that remove a player's disabled templates by id themselves
+    data class Announcement(val main: ResourcePackInfo, val templates: List<ResourcePackInfo>, val removesTemplates: Boolean) {
+        val mappings: List<ResourcePackInfo> get() = templates + main
+        val templateHashes: Set<String> = templates.mapTo(HashSet()) { it.dedupHash }
+    }
+
+    private val announcements: MutableMap<String, Announcement> = ConcurrentHashMap()
+
+    private val retired = HashSet<String>()
+
+    val nexoServers: Set<String> get() = announcements.keys
+
+    fun announcement(server: String): Announcement? = announcements[server]
 
     val PACK_HASH_CHANNEL: MinecraftChannelIdentifier = MinecraftChannelIdentifier.from("nexo:pack_hash")
+
+    // Every regeneration announces new hashes, without retiring the previous ones the mappings grow forever
+    @Synchronized
+    fun announce(server: String, announcement: Announcement) {
+        announcements.put(server, announcement)?.let { previous -> previous.mappings.mapTo(retired) { it.obfuscatedHash } }
+        announcement.mappings.forEach(::addMapping)
+
+        val announced = announcements.values.flatMapTo(HashSet()) { it.mappings.map(ResourcePackInfo::obfuscatedHash) }
+        val held = packHashTracker.values.flatMapTo(HashSet()) { applied -> applied.values.map { it.packUuid } }
+        retired.removeAll { hash ->
+            if (hash in announced) return@removeAll true
+            val mapping = byObfHash[hash] ?: return@removeAll true
+            if (mapping.obfuscatedUuid in held) return@removeAll false
+            byObfHash.remove(hash)
+            byObfUuid.remove(mapping.obfuscatedUuid)
+            true
+        }
+    }
 
     fun addMapping(pack: ResourcePackInfo) {
         byObfHash[pack.obfuscatedHash] = pack
         byObfUuid[pack.obfuscatedUuid] = pack
     }
 
-    val allMappings: Collection<ResourcePackInfo> get() = byObfHash.values
+    // Mappings servers currently announce come first, they are the ones a restarted proxy needs before those servers re-announce
+    fun mappingsToCache(limit: Int): List<ResourcePackInfo> {
+        val announced = announcements.values.flatMapTo(LinkedHashSet()) { it.mappings }
+        return (announced + byObfHash.values.filterNot { it in announced }).take(limit)
+    }
 
     fun findMappingByHash(hash: String): ResourcePackInfo? =
         byObfHash[hash] ?: byObfHash.values.find { it.unobfuscatedHash == hash }
